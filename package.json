@@ -1,0 +1,32 @@
+{
+  "name": "growstack-server",
+  "version": "1.0.0",
+  "description": "Backend server for GrowStack 3D MERN website",
+  "main": "server.js",
+  "scripts": {
+    "start": "node start-all.js --prod",
+    "dev:server": "node start-all.js",
+    "dev:client": "npm run dev --prefix ../client",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "build:client": "npm run build --prefix ../client",
+    "install-all": "npm install && npm install --prefix ../client"
+  },
+  "dependencies": {
+    "@imagekit/nodejs": "^7.9.1",
+    "bcryptjs": "^2.4.3",
+    "compression": "^1.7.4",
+    "cors": "^2.8.5",
+    "cross-env": "^7.0.3",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.1.5",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.2.1",
+    "morgan": "^1.10.0"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "nodemon": "^3.1.0"
+  }
+}
