@@ -35,6 +35,10 @@ const FinanceSchema = new mongoose.Schema({
   title: { type: String, required: true },
   description: { type: String, default: '' },
   amount: { type: Number, required: true, min: 0 },
+  // Income-specific fields
+  discount: { type: Number, default: 0, min: 0 },
+  paid: { type: Number, default: 0, min: 0 },
+  pending: { type: Number, default: 0, min: 0 },
   category: { type: String, default: 'General' },
   date: { type: Date, required: true, default: Date.now },
   createdAt: { type: Date, default: Date.now }

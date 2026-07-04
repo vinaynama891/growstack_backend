@@ -303,7 +303,7 @@ router.get('/admin/finance/summary', verifyAdminToken, async (req, res) => {
 
 // POST create finance entry
 router.post('/admin/finance', verifyAdminToken, async (req, res) => {
-  const { type, title, description, amount, category, date } = req.body;
+  const { type, title, description, amount, discount, paid, pending, category, date } = req.body;
   if (!type || !title || amount === undefined || amount === null) {
     return res.status(400).json({ message: 'Type, title, and amount are required.' });
   }
@@ -312,11 +312,20 @@ router.post('/admin/finance', verifyAdminToken, async (req, res) => {
   }
 
   try {
+    const totalAmount = parseFloat(amount) || 0;
+    const discountVal = type === 'income' ? (parseFloat(discount) || 0) : 0;
+    const paidVal = type === 'income' ? (parseFloat(paid) || 0) : 0;
+    // Auto-calculate pending = total - discount - paid
+    const pendingVal = type === 'income' ? Math.max(0, totalAmount - discountVal - paidVal) : 0;
+
     const entry = new Finance({
       type,
       title: title.trim(),
       description: description ? description.trim() : '',
-      amount: parseFloat(amount),
+      amount: totalAmount,
+      discount: discountVal,
+      paid: paidVal,
+      pending: pendingVal,
       category: category ? category.trim() : 'General',
       date: date ? new Date(date) : new Date()
     });
@@ -330,15 +339,25 @@ router.post('/admin/finance', verifyAdminToken, async (req, res) => {
 
 // PUT update finance entry
 router.put('/admin/finance/:id', verifyAdminToken, async (req, res) => {
-  const { type, title, description, amount, category, date } = req.body;
+  const { type, title, description, amount, discount, paid, pending, category, date } = req.body;
   try {
+    const totalAmount = amount !== undefined ? parseFloat(amount) : undefined;
+    const discountVal = type === 'income' && discount !== undefined ? parseFloat(discount) || 0 : 0;
+    const paidVal = type === 'income' && paid !== undefined ? parseFloat(paid) || 0 : 0;
+    const pendingVal = (totalAmount !== undefined && type === 'income')
+      ? Math.max(0, totalAmount - discountVal - paidVal)
+      : undefined;
+
     const updated = await Finance.findByIdAndUpdate(
       req.params.id,
       {
         type,
         title: title ? title.trim() : undefined,
         description: description !== undefined ? description.trim() : undefined,
-        amount: amount !== undefined ? parseFloat(amount) : undefined,
+        amount: totalAmount,
+        discount: discountVal,
+        paid: paidVal,
+        pending: pendingVal,
         category: category ? category.trim() : 'General',
         date: date ? new Date(date) : undefined
       },
