@@ -250,30 +250,32 @@ router.get('/admin/finance/summary', verifyAdminToken, async (req, res) => {
   try {
     const entries = await Finance.find();
 
-    let totalIncome = 0;
+    let totalIncome = 0;   // effective = amount - discount
     let totalExpense = 0;
     const monthlyMap = {};
     const categoryMap = {};
 
     entries.forEach(entry => {
-      const amount = entry.amount || 0;
       const d = new Date(entry.date);
       const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
       const monthLabel = d.toLocaleString('default', { month: 'short', year: 'numeric' });
       const cat = entry.category || 'General';
 
       if (entry.type === 'income') {
-        totalIncome += amount;
+        // Effective income = total amount minus discount
+        const effectiveIncome = (entry.amount || 0) - (entry.discount || 0);
+        totalIncome += effectiveIncome;
         if (!monthlyMap[monthKey]) monthlyMap[monthKey] = { month: monthLabel, income: 0, expense: 0 };
-        monthlyMap[monthKey].income += amount;
+        monthlyMap[monthKey].income += effectiveIncome;
         if (!categoryMap[cat]) categoryMap[cat] = { income: 0, expense: 0 };
-        categoryMap[cat].income += amount;
+        categoryMap[cat].income += effectiveIncome;
       } else {
-        totalExpense += amount;
+        const expense = entry.amount || 0;
+        totalExpense += expense;
         if (!monthlyMap[monthKey]) monthlyMap[monthKey] = { month: monthLabel, income: 0, expense: 0 };
-        monthlyMap[monthKey].expense += amount;
+        monthlyMap[monthKey].expense += expense;
         if (!categoryMap[cat]) categoryMap[cat] = { income: 0, expense: 0 };
-        categoryMap[cat].expense += amount;
+        categoryMap[cat].expense += expense;
       }
     });
 
@@ -291,7 +293,7 @@ router.get('/admin/finance/summary', verifyAdminToken, async (req, res) => {
     return res.json({
       totalIncome,
       totalExpense,
-      netPL: totalIncome - totalExpense,
+      netPL: totalIncome - totalExpense,  // (income after discount) - expenses
       monthly,
       categories
     });
@@ -380,6 +382,65 @@ router.delete('/admin/finance/:id', verifyAdminToken, async (req, res) => {
   } catch (error) {
     console.error('Delete finance error:', error);
     return res.status(500).json({ message: 'Failed to delete finance entry.' });
+  }
+});
+
+// POST add installment to an income entry
+router.post('/admin/finance/:id/installment', verifyAdminToken, async (req, res) => {
+  const { amount, date, note } = req.body;
+  if (!amount || parseFloat(amount) <= 0) {
+    return res.status(400).json({ message: 'Installment amount is required and must be > 0.' });
+  }
+
+  try {
+    const entry = await Finance.findById(req.params.id);
+    if (!entry) return res.status(404).json({ message: 'Finance entry not found.' });
+    if (entry.type !== 'income') {
+      return res.status(400).json({ message: 'Installments are only for income entries.' });
+    }
+
+    // Add new installment
+    entry.installments.push({
+      amount: parseFloat(amount),
+      date: date ? new Date(date) : new Date(),
+      note: note ? note.trim() : ''
+    });
+
+    // Recalculate paid = sum of all installments
+    const newPaid = entry.installments.reduce((sum, inst) => sum + inst.amount, 0);
+    entry.paid = newPaid;
+
+    // Recalculate pending = amount - discount - paid
+    entry.pending = Math.max(0, entry.amount - (entry.discount || 0) - newPaid);
+
+    await entry.save();
+    return res.status(201).json({ message: 'Installment added!', entry });
+  } catch (error) {
+    console.error('Add installment error:', error);
+    return res.status(500).json({ message: 'Failed to add installment.' });
+  }
+});
+
+// DELETE a specific installment from an income entry
+router.delete('/admin/finance/:id/installment/:instId', verifyAdminToken, async (req, res) => {
+  try {
+    const entry = await Finance.findById(req.params.id);
+    if (!entry) return res.status(404).json({ message: 'Finance entry not found.' });
+
+    entry.installments = entry.installments.filter(
+      inst => inst._id.toString() !== req.params.instId
+    );
+
+    // Recalculate
+    const newPaid = entry.installments.reduce((sum, inst) => sum + inst.amount, 0);
+    entry.paid = newPaid;
+    entry.pending = Math.max(0, entry.amount - (entry.discount || 0) - newPaid);
+
+    await entry.save();
+    return res.json({ message: 'Installment removed!', entry });
+  } catch (error) {
+    console.error('Delete installment error:', error);
+    return res.status(500).json({ message: 'Failed to remove installment.' });
   }
 });
 

@@ -30,6 +30,13 @@ const ProjectSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
+const InstallmentSchema = new mongoose.Schema({
+  amount: { type: Number, required: true, min: 0 },
+  date: { type: Date, required: true, default: Date.now },
+  note: { type: String, default: '' },
+  createdAt: { type: Date, default: Date.now }
+});
+
 const FinanceSchema = new mongoose.Schema({
   type: { type: String, enum: ['income', 'expense'], required: true },
   title: { type: String, required: true },
@@ -37,8 +44,9 @@ const FinanceSchema = new mongoose.Schema({
   amount: { type: Number, required: true, min: 0 },
   // Income-specific fields
   discount: { type: Number, default: 0, min: 0 },
-  paid: { type: Number, default: 0, min: 0 },
-  pending: { type: Number, default: 0, min: 0 },
+  paid: { type: Number, default: 0, min: 0 },     // sum of all installments
+  pending: { type: Number, default: 0, min: 0 },   // amount - discount - paid
+  installments: { type: [InstallmentSchema], default: [] },
   category: { type: String, default: 'General' },
   date: { type: Date, required: true, default: Date.now },
   createdAt: { type: Date, default: Date.now }
