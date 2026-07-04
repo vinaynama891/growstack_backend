@@ -30,9 +30,20 @@ const ProjectSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
+const FinanceSchema = new mongoose.Schema({
+  type: { type: String, enum: ['income', 'expense'], required: true },
+  title: { type: String, required: true },
+  description: { type: String, default: '' },
+  amount: { type: Number, required: true, min: 0 },
+  category: { type: String, default: 'General' },
+  date: { type: Date, required: true, default: Date.now },
+  createdAt: { type: Date, default: Date.now }
+});
+
 module.exports = {
   Admin: mongoose.model('Admin', AdminSchema),
   Service: mongoose.model('Service', ServiceSchema),
   Lead: mongoose.model('Lead', LeadSchema),
-  Project: mongoose.model('Project', ProjectSchema)
+  Project: mongoose.model('Project', ProjectSchema),
+  Finance: mongoose.model('Finance', FinanceSchema)
 };

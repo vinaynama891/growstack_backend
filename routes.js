@@ -1,7 +1,7 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const { Admin, Service, Lead, Project } = require('./models');
+const { Admin, Service, Lead, Project, Finance } = require('./models');
 const { verifyAdminToken, JWT_SECRET } = require('./auth');
 const imagekit = require('./imagekit');
 
@@ -229,6 +229,138 @@ router.delete('/admin/projects/:id', verifyAdminToken, async (req, res) => {
   } catch (error) {
     console.error('Delete project error:', error);
     return res.status(500).json({ message: 'Failed to delete project.' });
+  }
+});
+
+// --- FINANCE ROUTES ---
+
+// GET all finance entries
+router.get('/admin/finance', verifyAdminToken, async (req, res) => {
+  try {
+    const entries = await Finance.find().sort({ date: -1, createdAt: -1 });
+    return res.json(entries);
+  } catch (error) {
+    console.error('Fetch finance error:', error);
+    return res.status(500).json({ message: 'Failed to fetch finance records.' });
+  }
+});
+
+// GET finance summary (totals + monthly + category breakdown)
+router.get('/admin/finance/summary', verifyAdminToken, async (req, res) => {
+  try {
+    const entries = await Finance.find();
+
+    let totalIncome = 0;
+    let totalExpense = 0;
+    const monthlyMap = {};
+    const categoryMap = {};
+
+    entries.forEach(entry => {
+      const amount = entry.amount || 0;
+      const d = new Date(entry.date);
+      const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const monthLabel = d.toLocaleString('default', { month: 'short', year: 'numeric' });
+      const cat = entry.category || 'General';
+
+      if (entry.type === 'income') {
+        totalIncome += amount;
+        if (!monthlyMap[monthKey]) monthlyMap[monthKey] = { month: monthLabel, income: 0, expense: 0 };
+        monthlyMap[monthKey].income += amount;
+        if (!categoryMap[cat]) categoryMap[cat] = { income: 0, expense: 0 };
+        categoryMap[cat].income += amount;
+      } else {
+        totalExpense += amount;
+        if (!monthlyMap[monthKey]) monthlyMap[monthKey] = { month: monthLabel, income: 0, expense: 0 };
+        monthlyMap[monthKey].expense += amount;
+        if (!categoryMap[cat]) categoryMap[cat] = { income: 0, expense: 0 };
+        categoryMap[cat].expense += amount;
+      }
+    });
+
+    const monthly = Object.keys(monthlyMap)
+      .sort()
+      .slice(-6)
+      .map(k => monthlyMap[k]);
+
+    const categories = Object.keys(categoryMap).map(name => ({
+      name,
+      income: categoryMap[name].income,
+      expense: categoryMap[name].expense
+    }));
+
+    return res.json({
+      totalIncome,
+      totalExpense,
+      netPL: totalIncome - totalExpense,
+      monthly,
+      categories
+    });
+  } catch (error) {
+    console.error('Finance summary error:', error);
+    return res.status(500).json({ message: 'Failed to generate finance summary.' });
+  }
+});
+
+// POST create finance entry
+router.post('/admin/finance', verifyAdminToken, async (req, res) => {
+  const { type, title, description, amount, category, date } = req.body;
+  if (!type || !title || amount === undefined || amount === null) {
+    return res.status(400).json({ message: 'Type, title, and amount are required.' });
+  }
+  if (!['income', 'expense'].includes(type)) {
+    return res.status(400).json({ message: 'Type must be income or expense.' });
+  }
+
+  try {
+    const entry = new Finance({
+      type,
+      title: title.trim(),
+      description: description ? description.trim() : '',
+      amount: parseFloat(amount),
+      category: category ? category.trim() : 'General',
+      date: date ? new Date(date) : new Date()
+    });
+    await entry.save();
+    return res.status(201).json({ message: 'Finance entry created!', entry });
+  } catch (error) {
+    console.error('Create finance error:', error);
+    return res.status(500).json({ message: 'Failed to create finance entry.' });
+  }
+});
+
+// PUT update finance entry
+router.put('/admin/finance/:id', verifyAdminToken, async (req, res) => {
+  const { type, title, description, amount, category, date } = req.body;
+  try {
+    const updated = await Finance.findByIdAndUpdate(
+      req.params.id,
+      {
+        type,
+        title: title ? title.trim() : undefined,
+        description: description !== undefined ? description.trim() : undefined,
+        amount: amount !== undefined ? parseFloat(amount) : undefined,
+        category: category ? category.trim() : 'General',
+        date: date ? new Date(date) : undefined
+      },
+      { new: true, runValidators: true, omitUndefined: true }
+    );
+    if (!updated) return res.status(404).json({ message: 'Finance entry not found.' });
+    return res.json({ message: 'Finance entry updated!', entry: updated });
+  } catch (error) {
+    console.error('Update finance error:', error);
+    return res.status(500).json({ message: 'Failed to update finance entry.' });
+  }
+});
+
+// DELETE finance entry
+router.delete('/admin/finance/:id', verifyAdminToken, async (req, res) => {
+  try {
+    const deleted = await Finance.findByIdAndDelete(req.params.id);
+    if (!deleted) return res.status(404).json({ message: 'Finance entry not found.' });
+    return res.json({ message: 'Finance entry deleted!' });
+  } catch (error) {
+    console.error('Delete finance error:', error);
+    return res.status(500).json({ message: 'Failed to delete finance entry.' });
   }
 });
 
