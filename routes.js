@@ -1,13 +1,13 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const { Admin, Service, Lead, Project, Finance } = require('./models');
-const { verifyAdminToken, JWT_SECRET } = require('./auth');
+const { Admin, Caller, Service, Lead, SalesLead, Project, Finance } = require('./models');
+const { verifyAdminToken, verifyCallerToken, JWT_SECRET } = require('./auth');
 const imagekit = require('./imagekit');
 
 const router = express.Router();
 
-// --- AUTH ROUTE ---
+// --- AUTH ROUTE (Admin) ---
 router.post('/auth/login', async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
@@ -25,10 +25,36 @@ router.post('/auth/login', async (req, res) => {
       return res.status(401).json({ message: 'Invalid email or password.' });
     }
 
-    const token = jwt.sign({ id: admin._id, email: admin.email }, JWT_SECRET, { expiresIn: '7d' });
-    return res.json({ token, email: admin.email });
+    const token = jwt.sign({ id: admin._id, email: admin.email, role: 'admin' }, JWT_SECRET, { expiresIn: '7d' });
+    return res.json({ token, email: admin.email, role: 'admin' });
   } catch (error) {
     console.error('Login error:', error);
+    return res.status(500).json({ message: 'Internal server error.' });
+  }
+});
+
+// --- AUTH ROUTE (Caller / Salesman) ---
+router.post('/auth/caller-login', async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ message: 'Email and password are required.' });
+  }
+
+  try {
+    const caller = await Caller.findOne({ email });
+    if (!caller) {
+      return res.status(401).json({ message: 'Invalid email or password.' });
+    }
+
+    const isMatch = await bcrypt.compare(password, caller.password);
+    if (!isMatch) {
+      return res.status(401).json({ message: 'Invalid email or password.' });
+    }
+
+    const token = jwt.sign({ id: caller._id, email: caller.email, name: caller.name, role: 'caller' }, JWT_SECRET, { expiresIn: '7d' });
+    return res.json({ token, email: caller.email, name: caller.name, role: 'caller' });
+  } catch (error) {
+    console.error('Caller login error:', error);
     return res.status(500).json({ message: 'Internal server error.' });
   }
 });
@@ -76,6 +102,57 @@ router.put('/admin/leads/:id', verifyAdminToken, async (req, res) => {
   } catch (error) {
     console.error('Update lead error:', error);
     return res.status(500).json({ message: 'Failed to update lead.' });
+  }
+});
+
+// --- CALLER SALES LEAD SUBMIT ---
+router.post('/caller/sales-lead', verifyCallerToken, async (req, res) => {
+  const { businessName, businessmanName, contactNumber, status, notes, callRecording } = req.body;
+  if (!businessName || !businessmanName || !contactNumber || !status) {
+    return res.status(400).json({ message: 'Business name, businessman name, contact number, and status are required.' });
+  }
+  const validStatuses = ['interested', 'not interested', 'follow up'];
+  if (!validStatuses.includes(status)) {
+    return res.status(400).json({ message: 'Invalid status value.' });
+  }
+  try {
+    const newSalesLead = new SalesLead({
+      businessName,
+      businessmanName,
+      contactNumber,
+      status,
+      notes: notes || '',
+      callRecording: callRecording || '',
+      submittedBy: req.caller.email
+    });
+    await newSalesLead.save();
+    return res.status(201).json({ message: 'Sales lead submitted successfully!', salesLead: newSalesLead });
+  } catch (error) {
+    console.error('Sales lead submit error:', error);
+    return res.status(500).json({ message: 'Failed to submit sales lead.' });
+  }
+});
+
+// --- ADMIN VIEW SALES LEADS ---
+router.get('/admin/sales-leads', verifyAdminToken, async (req, res) => {
+  try {
+    const salesLeads = await SalesLead.find().sort({ createdAt: -1 });
+    return res.json(salesLeads);
+  } catch (error) {
+    console.error('Fetch sales leads error:', error);
+    return res.status(500).json({ message: 'Failed to fetch sales leads.' });
+  }
+});
+
+// --- ADMIN DELETE SALES LEAD ---
+router.delete('/admin/sales-leads/:id', verifyAdminToken, async (req, res) => {
+  try {
+    const deleted = await SalesLead.findByIdAndDelete(req.params.id);
+    if (!deleted) return res.status(404).json({ message: 'Sales lead not found.' });
+    return res.json({ message: 'Sales lead deleted.' });
+  } catch (error) {
+    console.error('Delete sales lead error:', error);
+    return res.status(500).json({ message: 'Failed to delete sales lead.' });
   }
 });
 

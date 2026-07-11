@@ -5,6 +5,25 @@ const AdminSchema = new mongoose.Schema({
   password: { type: String, required: true }
 });
 
+// Caller (Salesman) accounts
+const CallerSchema = new mongoose.Schema({
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  name: { type: String, default: 'Caller' }
+});
+
+// Sales Leads submitted by callers
+const SalesLeadSchema = new mongoose.Schema({
+  businessName: { type: String, required: true },
+  businessmanName: { type: String, required: true },
+  contactNumber: { type: String, required: true },
+  status: { type: String, enum: ['interested', 'not interested', 'follow up'], required: true },
+  callRecording: { type: String, default: '' }, // URL or base64, optional
+  notes: { type: String, default: '' },
+  submittedBy: { type: String, default: '' }, // caller email
+  createdAt: { type: Date, default: Date.now }
+});
+
 const ServiceSchema = new mongoose.Schema({
   title: { type: String, required: true },
   description: { type: String, required: true },
@@ -54,8 +73,10 @@ const FinanceSchema = new mongoose.Schema({
 
 module.exports = {
   Admin: mongoose.model('Admin', AdminSchema),
+  Caller: mongoose.model('Caller', CallerSchema),
   Service: mongoose.model('Service', ServiceSchema),
   Lead: mongoose.model('Lead', LeadSchema),
+  SalesLead: mongoose.model('SalesLead', SalesLeadSchema),
   Project: mongoose.model('Project', ProjectSchema),
   Finance: mongoose.model('Finance', FinanceSchema)
 };

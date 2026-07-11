@@ -8,7 +8,7 @@ const compression = require('compression');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
-const { Admin, Service } = require('./models');
+const { Admin, Caller, Service } = require('./models');
 const routes = require('./routes');
 
 dotenv.config();
@@ -117,6 +117,30 @@ mongoose.connect(MONGODB_URI)
       }
     } catch (err) {
       console.error('Error seeding admin user:', err);
+    }
+
+    // Seed Caller accounts
+    const callerAccounts = [
+      { email: 'caller@growstack.com', password: 'caller@123', name: 'GrowStack Caller' }
+    ];
+    for (const callerData of callerAccounts) {
+      try {
+        const existingCaller = await Caller.findOne({ email: callerData.email });
+        if (!existingCaller) {
+          const hashedPassword = await bcrypt.hash(callerData.password, 10);
+          const newCaller = new Caller({
+            email: callerData.email,
+            password: hashedPassword,
+            name: callerData.name
+          });
+          await newCaller.save();
+          console.log(`Default caller seeded: ${callerData.email}`);
+        } else {
+          console.log(`Caller already exists: ${callerData.email}`);
+        }
+      } catch (err) {
+        console.error(`Error seeding caller ${callerData.email}:`, err);
+      }
     }
 
     // Seed default services if database is empty
